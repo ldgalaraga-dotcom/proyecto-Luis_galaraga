@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Árbol Familiar Interactivo</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Configuración de la fuente y reseteo */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        /* Estilos del Tema (Modo Claro - Default) */
+        .light-mode {
+            --color-bg-primary: hsl(112, 50%, 91%);
+            --color-bg-secondary: #9aa7f3;
+            --color-text-primary: #1f2937;
+            --color-text-secondary: #4b5563;
+            --color-accent: #3b82f6;
+            --color-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --color-border: #e5e7eb;
+            --color-line: #9ca3af;
+            --color-dynamic-line: #6b7280; /* Color para líneas nuevas */
+        }
+
+        /* Estilos del Tema (Modo Oscuro) */
+        .dark-mode {
+            --color-bg-primary: #111827;
+            --color-bg-secondary: #1f2937;
+            --color-text-primary: #f9fafb;
+            --color-text-secondary: #d1d5db;
+            --color-accent: #60a5fa;
+            --color-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            --color-border: #374151;
+            --color-line: #6b7280;
+            --color-dynamic-line: #9ca3af; /* Color para líneas nuevas */
+        }
+
+        body {
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* Controles Superiores */
+        .header-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 20px;
+            padding: 0 10px;
+        }
+
+        .theme-toggle, .add-line-button {
+            background-color: var(--color-bg-secondary);
+            color: var(--color-text-primary);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 500;
+            box-shadow: var(--color-shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .add-line-button.active {
+            background-color: #ef4444; /* Rojo para indicar modo activo */
+            color: white;
+        }
+
+        /* Contenedor principal del árbol */
+        #treeView {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1200px;
+            position: relative; /* ¡NUEVO! Crucial para el overlay SVG */
+        }
+        
+        /* ¡NUEVO! Contenedor para líneas dinámicas SVG */
+        #lineContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%; /* Se ajustará con JS */
+            pointer-events: none; /* No bloquear clics */
+            z-index: 5; /* Detrás de los cards, delante del fondo */
+        }
+
+        #lineContainer line {
+            stroke: var(--color-dynamic-line);
+            stroke-width: 3px;
+            stroke-dasharray: 5 5; /* Líneas discontinuas */
+        }
+
+        /* ¡NUEVO! Resaltado para selección de cards */
+        .node-card.highlight-selection {
+            outline: 3px solid var(--color-accent);
+            outline-offset: 3px;
+            box-shadow: 0 0 20px var(--color-accent);
+            transform: translateY(-4px) scale(1.02);
+        }
+
+        /* Contenedor de las generaciones */
+        .family-generation {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            position: relative;
+            padding-top: 30px; 
+        }
+
+        /* Estilos de los nodos */
+        .node-item {
+            position: relative;
+            margin: 0 10px;
+            z-index: 10; /* Asegura que los cards estén sobre las líneas */
+        }
+
+        .node-card {
+            background-color: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            box-shadow: var(--color-shadow);
+            border-radius: 12px;
+            transition: transform 0.2s, box-shadow 0.2s, outline 0.2s;
+            overflow: hidden;
+            width: 100%;
+            display: block; 
+        }
+        
+        .node-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .node-image {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+        }
+
+        .node-content {
+            padding: 8px 12px;
+            text-align: center;
+        }
+
+        .node-name {
+            font-weight: 600;
+            color: var(--color-text-primary);
+            font-size: 0.9rem;
+        }
+
+        .node-role {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* Líneas de Conexión (CSS Puro Estático) */
+        .tree-line {
+            position: absolute;
+            background-color: var(--color-line);
+            z-index: 10;
+        }
+
+        .g1-branch {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            width: 50%;
+        }
+
+        @media (max-width: 767px) {
+            .g1-branch { width: 100%; }
+            .generation-1 { flex-direction: column; align-items: center; gap: 20px; }
+            .node-item { width: 120px; margin: 0 10px 20px 10px; }
+            .tree-line { display: none !important; }
+            .generation-2, .generation-3 { padding-top: 20px; }
+            .header-controls { flex-direction: column; gap: 10px; }
+        }
+
+        @media (min-width: 768px) {
+            .node-item { width: 150px; }
+            .g1-horizontal-line {
+                height: 3px;
+                width: calc(100% - 300px); 
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+            .g1-vertical-line {
+                width: 3px;
+                height: 30px;
+                top: -30px;
+                position: absolute;
+            }
+            .g2-to-g3-line-v {
+                width: 3px;
+                height: 30px;
+                top: -30px;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+            .g2-to-g3-line-h {
+                height: 3px;
+                width: calc(100% - 200px);
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+        }
+
+        /* Estilos del Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background-color: var(--color-bg-secondary);
+            color: var(--color-text-primary);
+            border-radius: 12px;
+            box-shadow: var(--color-shadow);
+            padding: 30px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            transform: scale(0.9);
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .modal-image {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-accent);
+            margin-bottom: 15px;
+        }
+        .modal-title {
+            color: var(--color-accent);
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+        .modal-role {
+            font-size: 1rem;
+            color: var(--color-text-secondary);
+            margin-bottom: 15px;
+        }
+        .modal-close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            line-height: 1;
+        }
+        .modal-close-button:hover {
+            background-color: var(--color-border);
+        }
+        .hidden { display: none !important; }
+        
+        /* ¡NUEVO! Notificación Toast */
+        .toast {
+            position: fixed;
+            bottom: -100px; /* Empezar fuera de la pantalla */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--color-accent);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: var(--color-shadow);
+            z-index: 2000;
+            transition: bottom 0.5s ease-in-out;
+            font-weight: 500;
+            pointer-events: none; /* No bloquear clics */
+        }
+        .toast.show {
+            bottom: 30px; /* Deslizar hacia adentro */
+        }
+        .toast.error { background-color: #ef4444; }
+        .toast.info { background-color: #3b82f6; }
+
+    </style>
+</head>
+<body class="light-mode">
+
+    <!-- ¡NUEVO! Controles Superiores -->
+    <div class="header-controls">
+        <h1 class="text-3xl font-bold p-3 rounded-xl shadow-lg text-center" style="background-color: var(--color-accent); color: white;">Mi Árbol Familiar</h1>
+        
+        <div>
+            <!-- Botón de Modo Oscuro/Claro -->
+            <button id="themeToggle" class="theme-toggle" aria-label="Alternar modo oscuro y claro" onclick="toggleTheme()">
+                <span id="themeIcon">☀️</span>
+            </button>
+            
+            <!-- ¡NUEVO! Botón para Agregar Línea -->
+            <button id="addLineButton" class="add-line-button" aria-label="Agregar nueva conexión">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                </svg>
+                <span>Agregar Conexión</span>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Vista principal: El Árbol -->
+    <main id="treeView" class="w-full" role="tree">
+
+        <!-- ¡NUEVO! Contenedor SVG para líneas dinámicas -->
+        <svg id="lineContainer"></svg>
+
+        <!-- Generación 1: Abuelos -->
+        <ul class="family-generation generation-1 mb-16" aria-label="Generación de Abuelos">
+            <li class="g1-branch" role="group">
+                <!-- Abuela 1 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g1-vertical-line left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileLuisina')" aria-label="Ver perfil de Luisina, Abuela">
+                        <figure>
+                            <img class="node-image" src="img/sofia.jpg" alt="Sofia" onerror="this.onerror=null;this.src='https://placehold.co/150x150/10B981/ffffff?text=Luisina'">
+                            <figcaption class="node-content">
+                                <div class="node-name">sofia montes</div>
+                                <div class="node-role">Abuela paterna </div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+                <!-- Abuelo 1 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g1-vertical-line left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileMiguel')" aria-label="Ver perfil de Miguel, Abuelo">
+                        <figure>
+                            <img class="node-image" src="img/miguel.jpg" alt="Retrato de Miguel, Abuelo" onerror="this.onerror=null;this.src='https://placehold.co/150x150/10B981/ffffff?text=Miguel'">
+                            <figcaption class="node-content">
+                                <div class="node-name">Miguel</div>
+                                <div class="node-role">Abuelo paterno</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+            </li>
+
+            <!-- Línea horizontal de conexión de abuelos -->
+            <div class="tree-line g1-horizontal-line lg:block hidden"></div>
+
+            <li class="g1-branch" role="group">
+                <!-- Abuela 2 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g1-vertical-line left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileRegina')" aria-label="Ver perfil de Regina, Abuela">
+                        <figure>
+                            <img class="node-image" src="img/regina.jpg" alt="Retrato de Regina, Abuela" onerror="this.onerror=null;this.src='https://placehold.co/150x150/F59E0B/ffffff?text=Regina'">
+                            <figcaption class="node-content">
+                                <div class="node-name">Regina</div>
+                                <div class="node-role">Abuela materna</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+                <!-- Abuelo 2 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g1-vertical-line left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileSofia')" aria-label="Ver perfil de Sofia, Abuela">
+                        <figure>
+                            <img class="node-image" src="img/francisco.jpg" alt="Retrato de Sofia, Abuela" onerror="this.onerror=null;this.src='https://placehold.co/150x150/F59E0B/ffffff?text=Sofia'">
+                            <figcaption class="node-content">
+                                <div class="node-name">Francisco</div>
+                                <div class="node-role">Abuelo materno</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+            </li>
+        </ul>
+
+        <!-- Generación 2: Padres -->
+        <ul class="family-generation generation-2 mb-16 relative" aria-label="Generación de Padres">
+            <!-- Línea vertical del tronco a los padres (Desktop) -->
+            <div class="tree-line g1-vertical-line h-8 top-0 left-1/2 -ml-[1.5px] lg:block hidden"></div>
+
+            <li class="flex flex-col lg:flex-row justify-center items-start gap-10 w-full" role="group">
+                <!-- Padre -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g2-to-g3-line-v left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileDaniel')" aria-label="Ver perfil de Daniel, Padre">
+                        <figure>
+                            <img class="node-image" src="img/luis.jpg" alt="Retrato de Daniel, Padre" onerror="this.onerror=null;this.src='https://placehold.co/150x150/EF4444/ffffff?text=Daniel'">
+                            <figcaption class="node-content">
+                                <div class="node-name">luis miguel</div>
+                                <div class="node-role">Padre</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+                <!-- Madre -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g2-to-g3-line-v left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileFrancisco')" aria-label="Ver perfil de Francisco, Madre">
+                        <figure>
+                            <img class="node-image" src="img/luisina.jpg" alt="Retrato de Francisco, Madre" onerror="this.onerror=null;this.src='https://placehold.co/150x150/EF4444/ffffff?text=Francisco'">
+                            <figcaption class="node-content">
+                                <div class="node-name">luisina</div>
+                                <div class="node-role">Madre</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+            </li>
+        </ul>
+
+        <!-- Generación 3: Hijos -->
+        <ul class="family-generation generation-3 relative" aria-label="Generación de Hijos">
+            <!-- Línea horizontal de conexión de hijos (Desktop) -->
+            <div class="tree-line g2-to-g3-line-h w-2/3 top-0 left-1/2 -ml-[1.5px] lg:block hidden"></div>
+
+            <li class="flex flex-wrap justify-center gap-6 w-full mt-8 lg:mt-0" role="group">
+                <!-- Hijo 1 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g2-to-g3-line-v left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileLuis')" aria-label="Ver perfil de Luis, Hijo">
+                        <figure>
+                            <img class="node-image" src="img/daniel.jpg" alt="Retrato de Luis, Hijo" onerror="this.onerror=null;this.src='https://placehold.co/150x150/34D399/ffffff?text=Luis'">
+                            <figcaption class="node-content">
+                                <div class="node-name">Luis daniel</div>
+                                <div class="node-role">Hijo menor</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+                <!-- Hijo 2 -->
+                <article class="node-item relative" role="treeitem">
+                    <div class="tree-line g2-to-g3-line-v left-1/2 -ml-[1.5px] lg:block hidden"></div>
+                    <a href="#" class="node-card" onclick="event.preventDefault(); showProfile('profileLuisa')" aria-label="Ver perfil de Luisa, Hija">
+                        <figure>
+                            <img class="node-image" src="img/luisa.jpg" alt="Retrato de Luisa, Hija" onerror="this.onerror=null;this.src='https://placehold.co/150x150/34D399/ffffff?text=Luisa'">
+                            <figcaption class="node-content">
+                                <div class="node-name">Luisa fernanda</div>
+                                <div class="node-role">Hija mayor</div>
+                            </figcaption>
+                        </figure>
+                    </a>
+                </article>
+            </li>
+        </ul>
+    </main>
+
+    <!-- Modal para mostrar la información del perfil -->
+    <div id="modalOverlay" class="modal-overlay" onclick="if (event.target === this) closeModal()">
+        <section id="profileModal" class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <button class="modal-close-button" onclick="closeModal()" aria-label="Cerrar ventana de perfil">
+                &times;
+            </button>
+            <div class="flex flex-col items-center text-center">
+                <img id="modalImage" class="modal-image" src="" alt="Retrato de la persona" onerror="this.onerror=null;this.src='https://placehold.co/100x100/CCCCCC/000000?text=Foto'">
+                <h2 id="modalTitle" class="modal-title"></h2>
+                <div id="modalRole" class="modal-role"></div>
+            </div>
+            <div id="modalContent" class="text-left">
+                <!-- El contenido del perfil se inyectará aquí -->
+            </div>
+        </section>
+    </div>
+
+    <!-- ¡NUEVO! Elemento para Notificaciones Toast -->
+    <div id="toastNotification" class="toast"></div>
+
+
+    <script>
+        /**
+         * Datos de los perfiles (Centralizados para el modal)
+         */
+        const familyData = {
+            'profileLuisina': {
+                name: 'Sofia montes',
+                role: 'Abuela paterna',
+                image: 'img/sofia.jpg',
+                content: '<p>Una abuela cariñosa que disfruta tejer y contar historias de su juventud. Siempre tiene galletas frescas y una taza de té lista para cualquiera que la visite.</p>'
+            },
+            'profileMiguel': {
+                name: 'Miguel',
+                role: 'Abuelo paterno',
+                image: 'img/miguel.jpg',
+                content: '<p>El patriarca tranquilo, aficionado a la jardinería y a la pesca. Es conocido por su paciencia y por saber arreglar casi cualquier cosa en la casa.</p>'
+            },
+            'profileRegina': {
+                name: 'Regina',
+                role: 'Abuela materna',
+                image: 'img/regina.jpg',
+                content: '<p>Una abuela llena de energía, amante de la música clásica y el baile. Le encanta viajar y coleccionar recuerdos de diferentes culturas.</p>'
+            },
+            'profileSofia': {
+                name: 'Francisco',
+                role: 'Abuelo materno',
+                image: 'img/francisco.jpg',
+                content: '<p>Aunque se le asignó como abuela, este perfil se usará para el segundo abuelo del otro lado. Es una persona que se dedica a escribir poemas y le gusta la tranquilidad.</p>'
+            },
+            'profileDaniel': {
+                name: 'Luis Galaraga',
+                role: 'Padre',
+                image: 'img/luis.jpg',
+                content: '<p>El padre de la familia, dedicado a su trabajo en tecnología. En su tiempo libre, es un entusiasta de los videojuegos y de las películas de ciencia ficción.</p>'
+            },
+            'profileFrancisco': {
+                name: 'luisina',
+                role: 'Madre',
+                image: 'img/luisina.jpg',
+                content: '<p>La madre y pilar de la casa, le encanta la cocina gourmet y organizar reuniones familiares. Es la persona más organizada y siempre tiene un plan para todo.</p>'
+            },
+            'profileLuis': {
+                name: 'Luis',
+                role: 'Hijo',
+                image: 'img/daniel.jpg',
+                content: `
+                    <p><strong>Hobbies:</strong> I like to read manga. When I study or travel by bus, I always wear headphones and listen to music.</p>
+                    <p>In the afternoon, I like to take a nap to recharge my batteries.</p>
+                    <p>After my nap, I like to socialize. I text my friends and we make plans to meet up, chat, or just hang out. When I'm at home, I relax by reading more manga or searching for new music online before going to sleep.</p>
+                    <br>
+                    <p><strong>Estudios:</strong> degree in computer science<br>
+                    <strong>Lugar de nacimiento:</strong> monteria - cordoba <br>
+                    <strong>Metas:</strong> have my own motorcycle, work as a teacher, being a dad to a beautiful little girl</p>`
+            },
+            'profileLuisa': {
+                name: 'Luisa',
+                role: 'Hija',
+                image: 'img/luisa.jpg',
+                content: '<p>La hermana pequeña, una artista en ciernes. Le apasiona el dibujo digital y pasar tiempo al aire libre fotografiando la naturaleza. Sueña con publicar su propia novela gráfica.</p>'
+            }
+        };
+
+        /**
+         * Lógica de la aplicación: Navegación y Tema
+         */
+
+        // Función para mostrar el modal del perfil
+        function showProfile(profileId) {
+            const data = familyData[profileId];
+            const overlay = document.getElementById('modalOverlay');
+
+            if (!data) {
+                console.error("Profile data not found for ID:", profileId);
+                return;
+            }
+
+            // Populate modal content
+            document.getElementById('modalImage').src = data.image;
+            document.getElementById('modalImage').alt = `Retrato de ${data.name}`;
+            document.getElementById('modalTitle').textContent = data.name;
+            document.getElementById('modalRole').textContent = data.role;
+            document.getElementById('modalContent').innerHTML = data.content;
+
+            // Show the modal
+            overlay.classList.add('active');
+            
+            // Enfocar el modal para accesibilidad
+            document.getElementById('profileModal').focus();
+        }
+
+        // Función para cerrar el modal
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+
+        // Función para alternar entre modo claro y oscuro
+        function toggleTheme() {
+            const body = document.body;
+            const themeIcon = document.getElementById('themeIcon');
+
+            if (body.classList.contains('light-mode')) {
+                body.classList.remove('light-mode');
+                body.classList.add('dark-mode');
+                themeIcon.textContent = '🌙'; 
+                localStorage.setItem('theme', 'dark');
+            } else {
+                body.classList.remove('dark-mode');
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        /**
+         * ¡NUEVA! Lógica para Dibujar Líneas
+         */
+
+        // Estado global para el dibujo de líneas
+        let isDrawingLine = false;
+        let startCardElement = null;
+        let dynamicConnections = []; // Almacena conexiones: {start: 'id1', end: 'id2'}
+
+        // Elemento Toast
+        const toastEl = document.getElementById('toastNotification');
+        let toastTimer;
+
+        // Función para mostrar notificaciones toast
+        function showToast(message, type = 'success') {
+            clearTimeout(toastTimer);
+            toastEl.textContent = message;
+            toastEl.className = 'toast show'; // Resetea clases y muestra
+
+            if (type === 'error') toastEl.classList.add('error');
+            if (type === 'info') toastEl.classList.add('info');
+
+            toastTimer = setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, 3000);
+        }
+
+        // Función para activar/desactivar el modo de dibujo
+        function toggleLineDrawing() {
+            isDrawingLine = !isDrawingLine;
+            startCardElement = null; 
+            
+            const addLineButton = document.getElementById('addLineButton');
+            const buttonSpan = addLineButton.querySelector('span');
+
+            document.querySelectorAll('.node-card.highlight-selection').forEach(card => {
+                card.classList.remove('highlight-selection');
+            });
+
+            if (isDrawingLine) {
+                addLineButton.classList.add('active');
+                buttonSpan.textContent = 'Seleccionando...';
+                document.body.style.cursor = 'crosshair';
+                showToast('Modo de conexión activado. Seleccione el primer card.', 'info');
+            } else {
+                addLineButton.classList.remove('active');
+                buttonSpan.textContent = 'Agregar Conexión';
+                document.body.style.cursor = 'default';
+            }
+        }
+
+        // Manejador de clics en el árbol (para dibujar líneas)
+        function handleTreeClick(e) {
+            if (!isDrawingLine) return; // No estamos en modo dibujo
+
+            const clickedCard = e.target.closest('.node-card');
+            if (!clickedCard) return; // No se hizo clic en un card
+
+            // ¡Importante! Prevenir que se abra el modal
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            if (!startCardElement) {
+                // Es el primer card (inicio de la línea)
+                startCardElement = clickedCard;
+                startCardElement.classList.add('highlight-selection');
+                document.getElementById('addLineButton').querySelector('span').textContent = 'Seleccione final...';
+                showToast('Primer card seleccionado. Seleccione el segundo card.', 'info');
+            } else if (clickedCard !== startCardElement) {
+                // Es el segundo card (fin de la línea)
+                const startId = startCardElement.getAttribute('onclick').match(/showProfile\('(.+?)'\)/)[1];
+                const endId = clickedCard.getAttribute('onclick').match(/showProfile\('(.+?)'\)/)[1];
+
+                // Añadir conexión y redibujar
+                addDynamicConnection(startId, endId);
+                
+                // Resetear estado
+                startCardElement.classList.remove('highlight-selection');
+                startCardElement = null;
+                isDrawingLine = false;
+                document.getElementById('addLineButton').classList.remove('active');
+                document.getElementById('addLineButton').querySelector('span').textContent = 'Agregar Conexión';
+                document.body.style.cursor = 'default';
+                
+            }
+        }
+        
+        // Añade una conexión a la lista si no existe
+        function addDynamicConnection(startId, endId) {
+            const connectionExists = dynamicConnections.some(conn => 
+                (conn.start === startId && conn.end === endId) || 
+                (conn.start === endId && conn.end === startId)
+            );
+            
+            if (!connectionExists && startId !== endId) {
+                 dynamicConnections.push({ start: startId, end: endId });
+                 redrawAllDynamicLines();
+                 showToast('¡Conexión creada!');
+            } else if (startId === endId) {
+                 showToast('No puede conectar un card consigo mismo.', 'error');
+            } else {
+                 showToast('Esa conexión ya existe.', 'info');
+            }
+        }
+
+        // Redibuja TODAS las líneas dinámicas (para responsive)
+        function redrawAllDynamicLines() {
+            const lineContainer = document.getElementById('lineContainer');
+            const treeView = document.getElementById('treeView');
+
+            // Ajustar el tamaño del SVG al contenido del árbol
+            lineContainer.style.width = `${treeView.scrollWidth}px`;
+            lineContainer.style.height = `${treeView.scrollHeight}px`;
+            
+            const svgRect = lineContainer.getBoundingClientRect();
+
+            // Limpiar líneas antiguas
+            lineContainer.innerHTML = '';
+            
+            dynamicConnections.forEach(conn => {
+                const startEl = document.querySelector(`a[onclick*="showProfile('${conn.start}')"]`);
+                const endEl = document.querySelector(`a[onclick*="showProfile('${conn.end}')"]`);
+                
+                if (!startEl || !endEl) return; 
+                
+                const startRect = startEl.getBoundingClientRect();
+                const endRect = endEl.getBoundingClientRect();
+
+                // Calcular centros relativos al contenedor SVG
+                const x1 = (startRect.left + startRect.width / 2) - svgRect.left;
+                const y1 = (startRect.top + startRect.height / 2) - svgRect.top;
+                const x2 = (endRect.left + endRect.width / 2) - svgRect.left;
+                const y2 = (endRect.top + endRect.height / 2) - svgRect.top;
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x1);
+                line.setAttribute('y1', y1);
+                line.setAttribute('x2', x2);
+                line.setAttribute('y2', y2);
+                
+                lineContainer.appendChild(line);
+            });
+        }
+
+
+        // Inicializar todo al cargar
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const body = document.body;
+            const themeIcon = document.getElementById('themeIcon');
+
+            if (savedTheme === 'dark') {
+                body.classList.remove('light-mode');
+                body.classList.add('dark-mode');
+                themeIcon.textContent = '🌙';
+            } else {
+                body.classList.remove('dark-mode');
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+            }
+
+            // Opcional: Cerrar modal con la tecla ESC
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('active')) {
+                    closeModal();
+                }
+            });
+
+            // ¡NUEVO! Añadir listeners para el dibujo de líneas
+            const addLineButton = document.getElementById('addLineButton');
+            const treeView = document.getElementById('treeView');
+            
+            addLineButton.addEventListener('click', toggleLineDrawing);
+            
+            // Usar 'true' (fase de captura) para interceptar el clic ANTES del onclick en línea
+            treeView.addEventListener('click', handleTreeClick, true); 
+            
+            // Redibujar líneas si la ventana cambia de tamaño
+            new ResizeObserver(redrawAllDynamicLines).observe(treeView);
+            
+            // Ajustar el tamaño del SVG inicialmente
+            redrawAllDynamicLines();
+        });
+    </script>
+</body>
+</html>
